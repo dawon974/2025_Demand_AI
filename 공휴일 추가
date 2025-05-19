@@ -1,0 +1,45 @@
+import pandas as pd
+import requests
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from google.colab import files
+from google.colab import driv휴일 
+
+# 1. 공공데이터포털 인코딩된 서비스 키 입력
+SERVICE_KEY = '   ' #인증키 발급 필요
+# 2. 공휴일 데이터 가져오기 (2022~2025)
+years = range(2022, 2026)
+holiday_dates = []
+
+for year in years:
+    for month in range(1, 13):
+        url = (
+            f"http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo"
+            f"?serviceKey={SERVICE_KEY}&solYear={year}&solMonth={str(month).zfill(2)}"
+        )
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"{year}-{month} 요청 실패")
+            continue
+
+        root = ET.fromstring(response.content)
+        items = root.find(".//items")
+        if items is not None:
+            for item in items.findall("item"):
+                locdate = item.findtext("locdate")       # YYYYMMDD
+                is_holiday = item.findtext("isHoliday")   # 'Y' or 'N'
+                if locdate and is_holiday == 'Y':
+                    holiday_dates.append(datetime.strptime(locdate, "%Y%m%d").date())
+
+# 3. 기존 엑셀 파일 불러오기
+drive.mount('/content/drive')
+df = pd.read_excel("/content/drive/MyDrive/파주지사_A.I예측추가(2022~2025).xlsx")
+df['Date'] = pd.to_datetime(df['일자'], errors='coerce')
+
+# 4. 공휴일 여부 컬럼 추가 (datetime.date 비교)
+df['Is_Holiday'] = df['Date'].dt.date.isin(holiday_dates).astype(int)
+
+# 5. 파일 저장 및 다운로드
+save_path = "/content/파주지사_AI예측_공휴일_API연동.xlsx"
+df.to_excel(save_path, index=False)
+files.download(save_path)
